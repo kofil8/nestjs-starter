@@ -1,0 +1,96 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── Enums ────────────────────────────────────────────
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
+enum FileVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+// ─── Models ───────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  firstName String
+  lastName  String
+  password  String
+  role      Role     @default(USER)
+
+  // Password reset
+  resetToken       String?
+  resetTokenExpiry DateTime?
+
+  // Relations
+  posts           Post[]
+  uploadedFiles   File[]
+
+  // Soft-delete
+  deletedAt DateTime?
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String
+
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("posts")
+}
+
+model File {
+  id          String         @id @default(uuid())
+  originalName String
+  mimeType    String
+  size        Int
+  path        String
+  url         String?
+  provider    String         @default("local") // "local" | "s3"
+  visibility  FileVisibility @default(PRIVATE)
+
+  uploadedBy   User    @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("files")
+}
+
+model EmailLog {
+  id        String   @id @default(uuid())
+  to        String
+  subject   String
+  template  String
+  status    String   // "sent" | "failed"
+  error     String?
+  sentAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@map("email_logs")
+}
