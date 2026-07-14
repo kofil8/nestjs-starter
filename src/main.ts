@@ -11,10 +11,16 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { Logger, LoggerErrorInterceptor } from 'nestjs-pino';
+import expressBasicAuth from 'express-basic-auth';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+  });
   const configService = app.get(ConfigService);
+  const logger = app.get(Logger);
+  app.useLogger(logger);
 
   // ─── Security Middleware ───────────────────────────
   app.use(helmet());
@@ -68,6 +74,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(
     new LoggingInterceptor(),
     new TransformInterceptor(),
+    new LoggerErrorInterceptor(),
   );
   // AllExceptionsFilter handles ALL exceptions including HttpException
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -78,9 +85,21 @@ async function bootstrap() {
     prefix: '/uploads/',
   });
 
-  // ─── Swagger / OpenAPI ─────────────────────────────
-  const { swaggerConfig } = await import('./common/swagger.config');
-  swaggerConfig(app, configService);
+  // ─── Swagger / OpenAPI (non-production only) ──────
+  const nodeEnv = configService.get<string>('app.nodeEnv', 'development');
+  if (nodeEnv !== 'production' && nodeEnv !== 'test') {
+    // Protect both the UI page and the JSON spec endpoint
+    app.use(
+      ['/api/v1/docs', '/api/v1/docs-json'],
+      expressBasicAuth({
+        challenge: true,
+        users: { admin: 'kofil' },
+      }),
+    );
+
+    const { swaggerConfig } = await import('./common/swagger.config');
+    swaggerConfig(app, configService);
+  }
 
   // ─── Server Initialization ─────────────────────────
   const port = configService.get<number>('app.port', 9001);
@@ -90,13 +109,15 @@ async function bootstrap() {
   const signals = ['SIGTERM', 'SIGINT'];
   for (const signal of signals) {
     process.on(signal, async () => {
-      console.log(`\n⚠️  Received ${signal}. Shutting down gracefully...`);
+      logger.log(`Received ${signal}. Shutting down gracefully...`);
       await app.close();
       process.exit(0);
     });
   }
 
-  console.log(`🚀 Server running on http://localhost:${port}/api/v1`);
-  console.log(`📚 Swagger docs at http://localhost:${port}/api/v1/docs`);
+  logger.log(`Server running on http://localhost:${port}/api/v1`);
+  if (nodeEnv !== 'production' && nodeEnv !== 'test') {
+    logger.log(`Swagger docs at http://localhost:${port}/api/v1/docs`);
+  }
 }
 bootstrap();

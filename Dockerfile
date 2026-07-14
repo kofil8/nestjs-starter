@@ -9,7 +9,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 FROM node:22-slim AS builder
 RUN corepack enable
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-ARG DATABASE_URL="postgresql://postgres:postgres@localhost:5432/app?schema=public"
+ARG DATABASE_URL="postgresql://postgres:kofil@localhost:5432/app?schema=public"
 ENV DATABASE_URL=$DATABASE_URL
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
